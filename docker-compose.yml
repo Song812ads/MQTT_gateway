@@ -27,6 +27,25 @@
 networks:
   edgex-network:
     driver: bridge
+
+version: '3.7'
+volumes:
+  consul-acl-token: {}
+  consul-config: {}
+  consul-data: {}
+  db-data: {}
+  edgex-init: {}
+  kong: {}
+  kuiper-connections: {}
+  kuiper-data: {}
+  kuiper-sources: {}
+  postgres-config: {}
+  postgres-data: {}
+  redis-config: {}
+  vault-config: {}
+  vault-file: {}
+  vault-logs: {}
+
 services:
   app-service-rules:
     command: /app-service-configurable -cp=consul.http://edgex-core-consul:8500 --registry
@@ -1023,21 +1042,4 @@ services:
     - edgex-init:/edgex-init:ro,z
     - vault-file:/vault/file:z
     - vault-logs:/vault/logs:z
-version: '3.7'
-volumes:
-  consul-acl-token: {}
-  consul-config: {}
-  consul-data: {}
-  db-data: {}
-  edgex-init: {}
-  kong: {}
-  kuiper-connections: {}
-  kuiper-data: {}
-  kuiper-sources: {}
-  postgres-config: {}
-  postgres-data: {}
-  redis-config: {}
-  vault-config: {}
-  vault-file: {}
-  vault-logs: {}
 

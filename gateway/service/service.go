@@ -1,12 +1,10 @@
 package service
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -22,11 +20,17 @@ func NewService() *Service {
 	return &Service{}
 }
 
-type DeviceInfo struct {
+type DataTopic struct {
 	Topic    string `json:"topic"`
-	Broker   string `json:"broker"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Datatype string `json:"datatype"`
+}
+
+type DeviceInfo struct {
+	Topic       []string `json:"topic"`
+	Broker      string   `json:"broker"`
+	Username    string   `json:"username"`
+	Password    string   `json:"password"`
+	Device_type string   `json:"device_type"`
 }
 
 func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
@@ -47,113 +51,118 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, err)
 		return
 	}
-	file, errFile := os.OpenFile("../docker-compose.yml", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	// file, errFile := os.OpenFile("../docker-compose.yml", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 
-	if errFile != nil {
-		WriteError(w, http.StatusBadRequest, errFile)
-		return
-	}
-	defer file.Close()
+	// if errFile != nil {
+	// 	WriteError(w, http.StatusBadRequest, errFile)
+	// 	return
+	// }
+	// defer file.Close()
 
-	var search_string = fmt.Sprintf("device-mqtt-%s", deviceInfo.Broker)
-	scanner := bufio.NewScanner(file)
+	// var search_string = fmt.Sprintf("device-mqtt-%s", deviceInfo.Broker) // Replace with actual broker name
 
-	found := false
-	re := regexp.MustCompile(`127\.0\.0\.1:(\d+):59982/tcp`)
+	// fmt.Println(search_string)
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	// scanner := bufio.NewScanner(file)
 
-		// Check if the line contains the search string
-		if strings.Contains(line, search_string) {
-			found = true
-			break // Exit loop once found
-		}
+	// found := false
+	// // re := regexp.MustCompile(`127\.0\.0\.1:(\d+):59982/tcp`)
 
-		matches := re.FindStringSubmatch(line)
-		// if len(matches) > 1 {
-		// matches[1] contains the first captured group (the first number after 127.0.0.1:)
-		fmt.Println("Found number:", matches)
-		// }
-	}
-	if !found {
-		// WriteError(w, http.StatusBadRequest, fmt.Errorf("Broker already exist"))
-		// return
+	// for scanner.Scan() {
+	// 	line := scanner.Text()
 
-	} else {
-		var formattedData = fmt.Sprintf(`
-		device-mqtt-%s:
-			command: /device-mqtt -cp=consul.http://edgex-core-consul:8500 --registry --confdir=/res
-			container_name: edgex-device-mqtt-%s
-			depends_on:
-			- consul
-			- data
-			- metadata
-			- security-bootstrapper
-			- mqtt-broker
-			entrypoint:
-			- /edgex-init/ready_to_run_wait_install.sh
-			environment:
-				API_GATEWAY_HOST: edgex-kong
-				API_GATEWAY_STATUS_PORT: '8100'
-				CLIENTS_CORE_COMMAND_HOST: edgex-core-command
-				CLIENTS_CORE_DATA_HOST: edgex-core-data
-				CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
-				CLIENTS_SUPPORT_NOTIFICATIONS_HOST: edgex-support-notifications
-				CLIENTS_SUPPORT_SCHEDULER_HOST: edgex-support-scheduler
-				DATABASES_PRIMARY_HOST: edgex-redis
-				EDGEX_SECURITY_SECRET_STORE: "true"
-				MESSAGEQUEUE_HOST: edgex-redis
-				PROXY_SETUP_HOST: edgex-security-proxy-setup
-				REGISTRY_HOST: edgex-core-consul
-				SECRETSTORE_HOST: edgex-vault
-				SECRETSTORE_PORT: '8200'
-				SERVICE_HOST: edgex-device-mqtt-%s
-				SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
-				SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
-				SPIFFE_TRUSTDOMAIN: edgexfoundry.org
-				STAGEGATE_BOOTSTRAPPER_HOST: edgex-security-bootstrapper
-				STAGEGATE_BOOTSTRAPPER_STARTPORT: '54321'
-				STAGEGATE_DATABASE_HOST: edgex-redis
-				STAGEGATE_DATABASE_PORT: '6379'
-				STAGEGATE_DATABASE_READYPORT: '6379'
-				STAGEGATE_KONGDB_HOST: edgex-kong-db
-				STAGEGATE_KONGDB_PORT: '5432'
-				STAGEGATE_KONGDB_READYPORT: '54325'
-				STAGEGATE_READY_TORUNPORT: '54329'
-				STAGEGATE_REGISTRY_HOST: edgex-core-consul
-				STAGEGATE_REGISTRY_PORT: '8500'
-				STAGEGATE_REGISTRY_READYPORT: '54324'
-				STAGEGATE_SECRETSTORESETUP_HOST: edgex-security-secretstore-setup
-				STAGEGATE_SECRETSTORESETUP_TOKENS_READYPORT: '54322'
-				STAGEGATE_WAITFOR_TIMEOUT: 60s
-				MQTTBROKERINFO_HOST: %s
-				DEVICE_DEVICESDIR: /res/devices
-				DEVICE_PROFILESDIR: /res/profiles
-			hostname: edgex-device-mqtt-%s
-			image: edgexfoundry/device-mqtt:2.3.0
-			networks:
-				edgex-network: {}
-			ports:
-			- 127.0.0.1:59900:59900/tcp
-			read_only: true
-			restart: always
-			security_opt:
-			- no-new-privileges:true
-			user: 2002:2001
-			volumes:
-			- edgex-init:/edgex-init:ro,z
-			- /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z
-			- ./device-mqtt-go/cmd/res:/res
-		`, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker)
+	// 	// Check if the line contains the search string
+	// 	if strings.Contains(line, search_string) {
+	// 		found = true
+	// 		fmt.Println("Exist")
+	// 		break // Exit loop once found
+	// 	}
+	// }
 
-		if _, err := file.Write([]byte(formattedData)); err != nil {
-			WriteError(w, http.StatusBadRequest, err)
-			return
-		}
-	}
+	// if !found {
 
-	url_edgex := fmt.Sprintf("http://localhost:59881/deviceservice/name/device-mqtt-%s", deviceInfo.Broker)
+	// 	// for scanner.Scan() {
+	// 	// 	line := scanner.Text()
+	// 	// 	matches := re.FindStringSubmatch(line)
+	// 	// 	// if len(matches) > 1 {
+	// 	// 	// matches[1] contains the first captured group (the first number after 127.0.0.1:)
+	// 	// 	fmt.Println("Found number:", matches)
+	// 	// }
+
+	// 	var formattedData = fmt.Sprintf(`
+	// device-mqtt-%s:
+	// 	command: /device-mqtt -cp=consul.http://edgex-core-consul:8500 --registry --confdir=/res
+	// 	container_name: edgex-device-mqtt-%s
+	// 	depends_on:
+	// 	- consul
+	// 	- data
+	// 	- metadata
+	// 	- security-bootstrapper
+	// 	- mqtt-broker
+	// 	entrypoint:
+	// 	- /edgex-init/ready_to_run_wait_install.sh
+	// 	environment:
+	// 		API_GATEWAY_HOST: edgex-kong
+	// 		API_GATEWAY_STATUS_PORT: '8100'
+	// 		CLIENTS_CORE_COMMAND_HOST: edgex-core-command
+	// 		CLIENTS_CORE_DATA_HOST: edgex-core-data
+	// 		CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
+	// 		CLIENTS_SUPPORT_NOTIFICATIONS_HOST: edgex-support-notifications
+	// 		CLIENTS_SUPPORT_SCHEDULER_HOST: edgex-support-scheduler
+	// 		DATABASES_PRIMARY_HOST: edgex-redis
+	// 		EDGEX_SECURITY_SECRET_STORE: "true"
+	// 		MESSAGEQUEUE_HOST: edgex-redis
+	// 		PROXY_SETUP_HOST: edgex-security-proxy-setup
+	// 		REGISTRY_HOST: edgex-core-consul
+	// 		SECRETSTORE_HOST: edgex-vault
+	// 		SECRETSTORE_PORT: '8200'
+	// 		SERVICE_HOST: edgex-device-mqtt-%s
+	// 		SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
+	// 		SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
+	// 		SPIFFE_TRUSTDOMAIN: edgexfoundry.org
+	// 		STAGEGATE_BOOTSTRAPPER_HOST: edgex-security-bootstrapper
+	// 		STAGEGATE_BOOTSTRAPPER_STARTPORT: '54321'
+	// 		STAGEGATE_DATABASE_HOST: edgex-redis
+	// 		STAGEGATE_DATABASE_PORT: '6379'
+	// 		STAGEGATE_DATABASE_READYPORT: '6379'
+	// 		STAGEGATE_KONGDB_HOST: edgex-kong-db
+	// 		STAGEGATE_KONGDB_PORT: '5432'
+	// 		STAGEGATE_KONGDB_READYPORT: '54325'
+	// 		STAGEGATE_READY_TORUNPORT: '54329'
+	// 		STAGEGATE_REGISTRY_HOST: edgex-core-consul
+	// 		STAGEGATE_REGISTRY_PORT: '8500'
+	// 		STAGEGATE_REGISTRY_READYPORT: '54324'
+	// 		STAGEGATE_SECRETSTORESETUP_HOST: edgex-security-secretstore-setup
+	// 		STAGEGATE_SECRETSTORESETUP_TOKENS_READYPORT: '54322'
+	// 		STAGEGATE_WAITFOR_TIMEOUT: 60s
+	// 		MQTTBROKERINFO_HOST: %s
+	// 		DEVICE_DEVICESDIR: /res/devices
+	// 		DEVICE_PROFILESDIR: /res/profiles
+	// 	hostname: edgex-device-mqtt-%s
+	// 	image: edgexfoundry/device-mqtt:2.3.0
+	// 	networks:
+	// 		edgex-network: {}
+	// 	ports:
+	// 	- 127.0.0.1:59900:59900/tcp
+	// 	read_only: true
+	// 	restart: always
+	// 	security_opt:
+	// 	- no-new-privileges:true
+	// 	user: 2002:2001
+	// 	volumes:
+	// 	- edgex-init:/edgex-init:ro,z
+	// 	- /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z
+	// 	- ./device-mqtt-go/cmd/res:/res
+	// 	`, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker)
+
+	// 	if _, err := file.Write([]byte(formattedData)); err != nil {
+	// 		WriteError(w, http.StatusBadRequest, err)
+	// 		return
+	// 	}
+	// }
+
+	// url_edgex := fmt.Sprintf("http://localhost:59881/deviceservice/name/device-mqtt", deviceInfo.Broker)
+	url_edgex := fmt.Sprintf("http://localhost:59881/api/v2/deviceservice/name/device-mqtt")
 
 	send := false
 	c := http.Client{Timeout: time.Duration(1) * time.Second}
@@ -168,7 +177,7 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 			// Check if the response status code is 200
 			if resp.StatusCode == 200 {
 				send = true
-				fmt.Println("Send success")
+				// fmt.Println("Send success")
 				resp.Body.Close() // Close the response body when done
 				break
 			} else {
@@ -183,45 +192,145 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url_device := fmt.Sprintf("http://localhost:59881/device")
-	var profile_body = fmt.Sprintf(`
-		[
-  {
-    "apiVersion": "v2",
-    "device": {
-      "name": "Test-create-mqtt",
-      "description": "Test mqtt",
-      "adminState": "UNLOCKED",
-      "operatingState": "UP",
-      "labels": [
-        "home",
-        "mqtt"
-      ],
-      "serviceName": "device-mqtt",
-      "profileName": "Test-Device-MQTT-Profile",
-      "autoEvents": [
-        {
-          "interval": "30s",
-          "onChange": true,
-          "sourceName": "randfloat32"
-        }
-      ],
-      "protocols": {
-        "mqtt": {
-          "CommandTopic": %s
-        }} }}]
-					`, deviceInfo.Topic)
+	var device_name []string
+	var profile_name []string
 
-	_ = profile_body
-	_ = url_device
-	// myJson := bytes.NewBuffer([]byte(profile_body))
+	// fmt.Println(len(deviceInfo.Topic))
 
-	// if resp, err := c.Post(url_device, "application/json", myJson); err != nil {
+	for i := 0; i < len(deviceInfo.Topic); i++ {
+		parts := strings.Split(deviceInfo.Topic[i], "/")
+		if len(parts) >= 3 {
+			device_name = append(device_name, parts[len(parts)-2])
+			profile_name = append(profile_name, parts[len(parts)-1])
+		} else {
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("Topic is not valid"))
+		}
+	}
 
-	// }
+	url_profile := fmt.Sprintf("http://localhost:59881/api/v2/deviceprofile")
 
+	var profiles []map[string]interface{}
+
+	// Iterate over the device names to create a profile for each one
+	// Iterate over the device names to create a profile for each one
+	for i := 0; i < len(device_name); i++ {
+		data := map[string]interface{}{
+			"apiVersion": "v2",
+			"profile": map[string]interface{}{
+				"name":         fmt.Sprintf("%s-MQTT-device-profile", device_name[i]), // Dynamically set the profile name
+				"manufacturer": "SMIC",
+				"model":        "1",
+				"labels": []string{
+					"MQTT",
+					"data",
+				},
+				"description": "device profile of MQTT devices",
+				"deviceResources": []map[string]interface{}{
+					{
+						"name":        "data",
+						"isHidden":    false,
+						"description": "data JSON message",
+						"properties": map[string]interface{}{
+							"valueType": "Object",
+							"readWrite": "RW",
+							"mediaType": "application/json",
+						},
+					},
+					{
+						"name":        "status",
+						"isHidden":    false,
+						"description": "data JSON message",
+						"properties": map[string]interface{}{
+							"valueType": "Object",
+							"readWrite": "RW",
+							"mediaType": "application/json",
+						},
+					},
+				},
+			},
+		}
+
+		// Append the profile data to the profiles slice
+		profiles = append(profiles, data)
+	}
+
+	// Marshal the map to JSON to verify the structure
+	jsonDataProfile, err := json.MarshalIndent(profiles, "", "  ")
+	if err != nil {
+		fmt.Println("Error marshaling JSON:", err)
+		return
+	}
+	if err != nil {
+		fmt.Println("Error marshaling JSON:", err)
+		return
+	}
+
+	reader := bytes.NewReader(jsonDataProfile)
+	resp, err := c.Post(url_profile, "application/json", reader)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("Error add device"))
+		fmt.Println(err)
+		return
+	}
+	if resp.StatusCode/100 != 2 { // 200 OK
+		WriteError(w, resp.StatusCode, fmt.Errorf("Received non-OK status code: %d", resp.StatusCode))
+		fmt.Println(err)
+		return
+	}
+
+	url_device := fmt.Sprintf("http://localhost:59881/api/v2/device")
+
+	var devices []map[string]interface{}
+
+	// fmt.Println(len(device_name))
+
+	// Loop through the arrays and construct the JSON-like structure
+	for i := 0; i < len(device_name); i++ {
+		device := map[string]interface{}{
+			"apiVersion": "v2",
+			"device": map[string]interface{}{
+				"name":           device_name[i],
+				"description":    "Test mqtt",
+				"adminState":     "UNLOCKED",
+				"operatingState": "UP",
+				"labels": []string{
+					"home", "mqtt",
+				},
+				"serviceName": "device-mqtt",
+				"profileName": fmt.Sprintf("%s-MQTT-device-profile", device_name[i]),
+				"protocols": map[string]interface{}{
+					"mqtt": map[string]string{
+						"CommandTopic": deviceInfo.Topic[i],
+					},
+				},
+			},
+		}
+		// Add the device map to the devices slice
+		devices = append(devices, device)
+	}
+
+	// Marshal the final result into JSON
+	jsonDataDevice, err := json.MarshalIndent(devices, "", "  ")
+
+	if err != nil {
+		fmt.Println("Error marshaling JSON:", err)
+		return
+	}
+
+	reader = bytes.NewReader(jsonDataDevice)
+	resp, err = c.Post(url_device, "application/json", reader)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("Error add device"))
+		return
+	}
+	if resp.StatusCode/100 != 2 { // 200 OK
+		WriteError(w, resp.StatusCode, fmt.Errorf("Received non-OK status code: %d", resp.StatusCode))
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, "Add success")
 	// url_profile := fmt.Sprintf("http://localhost:59881/device")
-	// profile_body := fmt.S
+	// device_body :=
 
 	// fmt.Println("Data: ", deviceInfo.Broker)
 
@@ -247,7 +356,7 @@ func WriteError(w http.ResponseWriter, status int, err error) {
 }
 
 func validateFields(deviceInfo DeviceInfo) error {
-	if deviceInfo.Topic == "" {
+	if len(deviceInfo.Topic) == 0 {
 		return fmt.Errorf("topic field is required")
 	}
 	if deviceInfo.Broker == "" {
