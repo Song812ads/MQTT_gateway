@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -31,6 +32,12 @@ type DeviceInfo struct {
 	Username    string   `json:"username"`
 	Password    string   `json:"password"`
 	Device_type string   `json:"device_type"`
+}
+
+type Error struct {
+	ApiVersion string `json:"apiVersion"`
+	Message    string `json:"message"`
+	StatusCode int    `json:"statusCode"`
 }
 
 func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
@@ -201,9 +208,15 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(deviceInfo.Topic[i], "/")
 		if len(parts) >= 3 {
 			device_name = append(device_name, parts[len(parts)-2])
+			if parts[len(parts)-1] != "data" && parts[len(parts)-1] != "status" {
+				WriteError(w, http.StatusBadRequest, fmt.Errorf("Profile name is not valid"))
+				return
+			}
 			profile_name = append(profile_name, parts[len(parts)-1])
+
 		} else {
 			WriteError(w, http.StatusBadRequest, fmt.Errorf("Topic is not valid"))
+			return
 		}
 	}
 
@@ -214,6 +227,26 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 	// Iterate over the device names to create a profile for each one
 	// Iterate over the device names to create a profile for each one
 	for i := 0; i < len(device_name); i++ {
+		var url_resource = fmt.Sprintf("http://localhost:59881/api/v2/deviceresource/profile/%s/resource/%s", fmt.Sprintf("%s-MQTT-device-profile", device_name[i]))
+
+		resp, err := c.Get(url_resource)
+		if err != nil {
+			// Handle the error (e.g., network issue, service down)
+			fmt.Println("Waiting for service to begin...")
+		} else {
+			// Check if the response status code is 200
+			if resp.StatusCode == 200 {
+				send = true
+				// fmt.Println("Send success")
+				resp.Body.Close() // Close the response body when done
+				break
+			} else {
+				// If status code is not 200, handle the error or retry
+				fmt.Printf("Received status %d. Retrying...\n", resp.StatusCode)
+				resp.Body.Close() // Close the response body even on failure
+			}
+		}
+
 		data := map[string]interface{}{
 			"apiVersion": "v2",
 			"profile": map[string]interface{}{
@@ -227,17 +260,7 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 				"description": "device profile of MQTT devices",
 				"deviceResources": []map[string]interface{}{
 					{
-						"name":        "data",
-						"isHidden":    false,
-						"description": "data JSON message",
-						"properties": map[string]interface{}{
-							"valueType": "Object",
-							"readWrite": "RW",
-							"mediaType": "application/json",
-						},
-					},
-					{
-						"name":        "status",
+						"name":        profile_name[i],
 						"isHidden":    false,
 						"description": "data JSON message",
 						"properties": map[string]interface{}{
@@ -277,6 +300,39 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 		return
 	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Errorf("Error reading response body"))
+		fmt.Println(err)
+		return
+	}
+
+	// Parse the JSON response body into a slice of maps (assuming the response is an array of objects)
+	var responseData []map[string]interface{}
+	err = json.Unmarshal(body, &responseData)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Errorf("Error parsing response body"))
+		fmt.Println(err)
+		return
+	}
+
+	for _, item := range responseData {
+		// Type assertion to extract the statusCode
+		if statusCode, ok := item["statusCode"].(float64); ok { // Use float64 because JSON numbers are usually parsed as float64
+			if statusCode != http.StatusOK {
+				WriteError(w, http.StatusBadRequest, fmt.Errorf("Error adding profile device"))
+				return
+			}
+			fmt.Printf("StatusCode: %.0f\n", statusCode)
+		} else {
+			WriteError(w, http.StatusInternalServerError, fmt.Errorf("Error parsing response body"))
+			fmt.Println("StatusCode not found in map")
+			return
+		}
+	}
+
+	// Print the parsed response (or handle it according to your needs)
+	// fmt.Println("Response data:", responseData)
 
 	url_device := fmt.Sprintf("http://localhost:59881/api/v2/device")
 
@@ -323,11 +379,41 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, fmt.Errorf("Error add device"))
 		return
 	}
-	if resp.StatusCode/100 != 2 { // 200 OK
+	if resp.StatusCode != http.StatusOK { // 200 OK
 		WriteError(w, resp.StatusCode, fmt.Errorf("Received non-OK status code: %d", resp.StatusCode))
 		return
 	}
 
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Errorf("Error reading response body"))
+		fmt.Println(err)
+		return
+	}
+
+	// Parse the JSON response body into a slice of maps (assuming the response is an array of objects)
+	var responseDataDevice []map[string]interface{}
+	err = json.Unmarshal(body, &responseDataDevice)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Errorf("Error parsing response body"))
+		fmt.Println(err)
+		return
+	}
+
+	for _, item := range responseDataDevice {
+		// Type assertion to extract the statusCode
+		if statusCode, ok := item["statusCode"].(float64); ok { // Use float64 because JSON numbers are usually parsed as float64
+			if statusCode != http.StatusOK {
+				WriteError(w, http.StatusBadRequest, fmt.Errorf("Error adding device"))
+				return
+			}
+			fmt.Printf("StatusCode: %.0f\n", statusCode)
+		} else {
+			WriteError(w, http.StatusInternalServerError, fmt.Errorf("Error parsing response body"))
+			fmt.Println("StatusCode not found in map")
+			return
+		}
+	}
 	WriteJSON(w, http.StatusOK, "Add success")
 	// url_profile := fmt.Sprintf("http://localhost:59881/device")
 	// device_body :=
