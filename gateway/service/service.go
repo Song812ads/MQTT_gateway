@@ -1,11 +1,16 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,115 +63,134 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, err)
 		return
 	}
-	// file, errFile := os.OpenFile("../docker-compose.yml", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	file, errFile := os.Open("../docker-compose.yml")
 
-	// if errFile != nil {
-	// 	WriteError(w, http.StatusBadRequest, errFile)
-	// 	return
-	// }
-	// defer file.Close()
+	if errFile != nil {
+		WriteError(w, http.StatusBadRequest, errFile)
+		return
+	}
+	defer file.Close()
 
-	// var search_string = fmt.Sprintf("device-mqtt-%s", deviceInfo.Broker) // Replace with actual broker name
+	var search_string = fmt.Sprintf("device-mqtt-%s", deviceInfo.Broker) // Replace with actual broker name
 
-	// fmt.Println(search_string)
+	var port int
 
-	// scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(file)
 
-	// found := false
-	// // re := regexp.MustCompile(`127\.0\.0\.1:(\d+):59982/tcp`)
+	found := false
+	re := regexp.MustCompile(`127\.0\.0\.1:59982:(\d+)/tcp`)
+	var maxPort float64 = math.Inf(-1)
+	for scanner.Scan() {
+		line := scanner.Text()
+		matches := re.FindStringSubmatch(line)
+		if len(matches) > 1 {
+			// matches[1] contains the first captured group (the first number after 127.0.0.1:)
+			fmt.Println("Found number:", matches[1])
+			portStr := matches[1]              // Port number as string
+			port, err := strconv.Atoi(portStr) // Convert the port string to an integer
+			if err != nil {
+				fmt.Println("Error converting port:", err)
+				continue
+			}
+			maxPort = math.Max(maxPort, float64(port)+1)
+		}
+		// Check if the line contains the search string
+		if strings.Contains(line, search_string) {
+			found = true
+			break // Exit loop once found
+		}
+	}
+	file.Close()
+	if err := scanner.Err(); err != nil {
+		fmt.Println("Error reading file:", err)
+		return
+	}
+	if maxPort == math.Inf(-1) {
+		fmt.Println("No matching ports found.")
+	} else {
+		port = int(maxPort) + 1
+		fmt.Println("Maximum port found:", int(maxPort)) // Convert maxPort back to int for printing
+	}
+	if !found {
+		var formattedData = fmt.Sprintf(`
+  device-mqtt-%s:
+    command: /device-mqtt -cp=consul.http://edgex-core-consul:8500 --registry --confdir=/res
+    container_name: edgex-device-mqtt-%s
+    depends_on:
+    - consul
+    - data
+    - metadata
+    - security-bootstrapper
+    - mqtt-broker
+    entrypoint:
+    - /edgex-init/ready_to_run_wait_install.sh
+    environment:
+      API_GATEWAY_HOST: edgex-kong
+      API_GATEWAY_STATUS_PORT: '8100'
+      CLIENTS_CORE_COMMAND_HOST: edgex-core-command
+      CLIENTS_CORE_DATA_HOST: edgex-core-data
+      CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
+      CLIENTS_SUPPORT_NOTIFICATIONS_HOST: edgex-support-notifications
+      CLIENTS_SUPPORT_SCHEDULER_HOST: edgex-support-scheduler
+      DATABASES_PRIMARY_HOST: edgex-redis
+      EDGEX_SECURITY_SECRET_STORE: "true"
+      MESSAGEQUEUE_HOST: edgex-redis
+      PROXY_SETUP_HOST: edgex-security-proxy-setup
+      REGISTRY_HOST: edgex-core-consul
+      SECRETSTORE_HOST: edgex-vault
+      SECRETSTORE_PORT: '8200'
+      SERVICE_HOST: edgex-device-mqtt-%s
+      SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
+      SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
+      SPIFFE_TRUSTDOMAIN: edgexfoundry.org
+      STAGEGATE_BOOTSTRAPPER_HOST: edgex-security-bootstrapper
+      STAGEGATE_BOOTSTRAPPER_STARTPORT: '54321'
+      STAGEGATE_DATABASE_HOST: edgex-redis
+      STAGEGATE_DATABASE_PORT: '6379'
+      STAGEGATE_DATABASE_READYPORT: '6379'
+      STAGEGATE_KONGDB_HOST: edgex-kong-db
+      STAGEGATE_KONGDB_PORT: '5432'
+      STAGEGATE_KONGDB_READYPORT: '54325'
+      STAGEGATE_READY_TORUNPORT: '54329'
+      STAGEGATE_REGISTRY_HOST: edgex-core-consul
+      STAGEGATE_REGISTRY_PORT: '8500'
+      STAGEGATE_REGISTRY_READYPORT: '54324'
+      STAGEGATE_SECRETSTORESETUP_HOST: edgex-security-secretstore-setup
+      STAGEGATE_SECRETSTORESETUP_TOKENS_READYPORT: '54322'
+      STAGEGATE_WAITFOR_TIMEOUT: 60s
+      MQTTBROKERINFO_HOST: %s
 
-	// for scanner.Scan() {
-	// 	line := scanner.Text()
+      DEVICE_DEVICESDIR: /res/devices
+      DEVICE_PROFILESDIR: /res/profiles
+    hostname: edgex-device-mqtt-%s
+    image: edgexfoundry/device-mqtt:2.3.0
+    networks:
+      edgex-network: {}
+    ports:
+    - 127.0.0.1:59982:%s/tcp
+    read_only: true
+    restart: always
+    security_opt:
+    - no-new-privileges:true
+    user: 2002:2001
+    volumes:
+    - edgex-init:/edgex-init:ro,z
+    - /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z
+    - ./device-mqtt-go/cmd/res:/res
+	`, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, port)
 
-	// 	// Check if the line contains the search string
-	// 	if strings.Contains(line, search_string) {
-	// 		found = true
-	// 		fmt.Println("Exist")
-	// 		break // Exit loop once found
-	// 	}
-	// }
+		file, errFile := os.OpenFile("../docker-compose.yml", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		if errFile != nil {
+			fmt.Println(errFile)
+			return
+		}
+		defer file.Close()
 
-	// if !found {
-
-	// 	// for scanner.Scan() {
-	// 	// 	line := scanner.Text()
-	// 	// 	matches := re.FindStringSubmatch(line)
-	// 	// 	// if len(matches) > 1 {
-	// 	// 	// matches[1] contains the first captured group (the first number after 127.0.0.1:)
-	// 	// 	fmt.Println("Found number:", matches)
-	// 	// }
-
-	// 	var formattedData = fmt.Sprintf(`
-	// device-mqtt-%s:
-	// 	command: /device-mqtt -cp=consul.http://edgex-core-consul:8500 --registry --confdir=/res
-	// 	container_name: edgex-device-mqtt-%s
-	// 	depends_on:
-	// 	- consul
-	// 	- data
-	// 	- metadata
-	// 	- security-bootstrapper
-	// 	- mqtt-broker
-	// 	entrypoint:
-	// 	- /edgex-init/ready_to_run_wait_install.sh
-	// 	environment:
-	// 		API_GATEWAY_HOST: edgex-kong
-	// 		API_GATEWAY_STATUS_PORT: '8100'
-	// 		CLIENTS_CORE_COMMAND_HOST: edgex-core-command
-	// 		CLIENTS_CORE_DATA_HOST: edgex-core-data
-	// 		CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
-	// 		CLIENTS_SUPPORT_NOTIFICATIONS_HOST: edgex-support-notifications
-	// 		CLIENTS_SUPPORT_SCHEDULER_HOST: edgex-support-scheduler
-	// 		DATABASES_PRIMARY_HOST: edgex-redis
-	// 		EDGEX_SECURITY_SECRET_STORE: "true"
-	// 		MESSAGEQUEUE_HOST: edgex-redis
-	// 		PROXY_SETUP_HOST: edgex-security-proxy-setup
-	// 		REGISTRY_HOST: edgex-core-consul
-	// 		SECRETSTORE_HOST: edgex-vault
-	// 		SECRETSTORE_PORT: '8200'
-	// 		SERVICE_HOST: edgex-device-mqtt-%s
-	// 		SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
-	// 		SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
-	// 		SPIFFE_TRUSTDOMAIN: edgexfoundry.org
-	// 		STAGEGATE_BOOTSTRAPPER_HOST: edgex-security-bootstrapper
-	// 		STAGEGATE_BOOTSTRAPPER_STARTPORT: '54321'
-	// 		STAGEGATE_DATABASE_HOST: edgex-redis
-	// 		STAGEGATE_DATABASE_PORT: '6379'
-	// 		STAGEGATE_DATABASE_READYPORT: '6379'
-	// 		STAGEGATE_KONGDB_HOST: edgex-kong-db
-	// 		STAGEGATE_KONGDB_PORT: '5432'
-	// 		STAGEGATE_KONGDB_READYPORT: '54325'
-	// 		STAGEGATE_READY_TORUNPORT: '54329'
-	// 		STAGEGATE_REGISTRY_HOST: edgex-core-consul
-	// 		STAGEGATE_REGISTRY_PORT: '8500'
-	// 		STAGEGATE_REGISTRY_READYPORT: '54324'
-	// 		STAGEGATE_SECRETSTORESETUP_HOST: edgex-security-secretstore-setup
-	// 		STAGEGATE_SECRETSTORESETUP_TOKENS_READYPORT: '54322'
-	// 		STAGEGATE_WAITFOR_TIMEOUT: 60s
-	// 		MQTTBROKERINFO_HOST: %s
-	// 		DEVICE_DEVICESDIR: /res/devices
-	// 		DEVICE_PROFILESDIR: /res/profiles
-	// 	hostname: edgex-device-mqtt-%s
-	// 	image: edgexfoundry/device-mqtt:2.3.0
-	// 	networks:
-	// 		edgex-network: {}
-	// 	ports:
-	// 	- 127.0.0.1:59900:59900/tcp
-	// 	read_only: true
-	// 	restart: always
-	// 	security_opt:
-	// 	- no-new-privileges:true
-	// 	user: 2002:2001
-	// 	volumes:
-	// 	- edgex-init:/edgex-init:ro,z
-	// 	- /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z
-	// 	- ./device-mqtt-go/cmd/res:/res
-	// 	`, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker)
-
-	// 	if _, err := file.Write([]byte(formattedData)); err != nil {
-	// 		WriteError(w, http.StatusBadRequest, err)
-	// 		return
-	// 	}
-	// }
+		if _, err := file.Write([]byte(formattedData)); err != nil {
+			WriteError(w, http.StatusBadRequest, err)
+			return
+		}
+	}
 
 	// url_edgex := fmt.Sprintf("http://localhost:59881/deviceservice/name/device-mqtt", deviceInfo.Broker)
 	url_edgex := fmt.Sprintf("http://localhost:59881/api/v2/deviceservice/name/device-mqtt")
@@ -224,8 +248,6 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 
 	var profiles []map[string]interface{}
 
-	// Iterate over the device names to create a profile for each one
-	// Iterate over the device names to create a profile for each one
 	for i := 0; i < len(device_name); i++ {
 		var url_resource = fmt.Sprintf("http://localhost:59881/api/v2/deviceresource/profile/%s/resource/%s", fmt.Sprintf("%s-MQTT-device-profile", device_name[i]))
 
