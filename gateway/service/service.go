@@ -209,7 +209,6 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
 	// fmt.Println(deviceInfo.Broker)
 
 	// url_edgex := fmt.Sprintf("http://localhost:59881/deviceservice/name/device-mqtt", deviceInfo.Broker)
