@@ -3,6 +3,7 @@ package service
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -16,19 +17,13 @@ func scanAndUpdate(fpath string, content string) error {
 	}
 	defer file.Close()
 
-	// Create a temporary file for writing
-	tmpFile, err := os.Create(fpath + ".tmp")
-	if err != nil {
-		return err
-	}
-	defer tmpFile.Close()
-
 	// Read the file line by line
 	scanner := bufio.NewScanner(file)
 	var foundToken bool
 	var targetLine string
 	var foundSecret bool
 	var foundACL bool
+	var fileContent []string
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -64,10 +59,7 @@ func scanAndUpdate(fpath string, content string) error {
 				updatedLine := "      ADD_SECRETSTORE_TOKENS: '" + secretStoreToken + "'"
 
 				// Write the updated line to the temporary file
-				_, err := tmpFile.WriteString(updatedLine + "\n")
-				if err != nil {
-					return err
-				}
+				fileContent = append(fileContent, updatedLine)
 			} else {
 				return fmt.Errorf("Docker file has problems")
 			}
@@ -94,10 +86,7 @@ func scanAndUpdate(fpath string, content string) error {
 				updatedLine := "      ADD_KNOWN_SECRETS: " + secretStoreToken + ""
 
 				// Write the updated line to the temporary file
-				_, err := tmpFile.WriteString(updatedLine + "\n")
-				if err != nil {
-					return err
-				}
+				fileContent = append(fileContent, updatedLine)
 			} else {
 				return fmt.Errorf("Docker file has problems")
 			}
@@ -132,19 +121,13 @@ func scanAndUpdate(fpath string, content string) error {
 				updatedLine := "      ADD_REGISTRY_ACL_ROLES: '" + secretStoreToken + "'"
 
 				// Write the updated line to the temporary file
-				_, err := tmpFile.WriteString(updatedLine + "\n")
-				if err != nil {
-					return err
-				}
+				fileContent = append(fileContent, updatedLine)
 			} else {
 				return fmt.Errorf("Docker file has problems")
 			}
 		} else {
 			// Write the line to the temporary file
-			_, err := tmpFile.WriteString(line + "\n")
-			if err != nil {
-				return err
-			}
+			fileContent = append(fileContent, line)
 		}
 	}
 
@@ -161,16 +144,22 @@ func scanAndUpdate(fpath string, content string) error {
 	if !foundSecret {
 		return fmt.Errorf("Docker compose does not have ADD_KNOWN_SECRETS field")
 	}
+	file.Close()
+	file, err := os.OpenFile(fpath, os.O_RDWR, 0644)
+	if err != nil {
+		log.Fatalf("Error opening file: %v", err)
+	}
+	defer file.Close()
+	file.Seek(0, 0)
+	file.Truncate(0)
+	for _, line := range fileContent {
+		_, err := file.WriteString(line + "\n")
+		if err != nil {
+			return err
+		}
+	}
 
-	// Replace the original file with the temporary one
-	err = os.Remove(fpath)
-	if err != nil {
-		return err
-	}
-	err = os.Rename(fpath+".tmp", fpath)
-	if err != nil {
-		return err
-	}
+	file.Close()
 
 	return nil
 }

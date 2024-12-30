@@ -13,6 +13,8 @@ RUN go mod tidy
 # https://docs.docker.com/reference/dockerfile/#copy
 COPY . ./
 
+# COPY ../docker-compose.yml ./
+
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -o /gateway
 

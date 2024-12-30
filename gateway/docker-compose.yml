@@ -176,7 +176,7 @@ services:
     entrypoint:
     - /edgex-init/consul_wait_install.sh
     environment:
-      ADD_REGISTRY_ACL_ROLES: 'device-mqtt'
+      ADD_REGISTRY_ACL_ROLES: 'device-mqtt,device-mqtt-1, device-mqtt-broker-adsas2, device-mqtt-broker-adsas5, device-mqtt-broker-test, device-mqtt-broker-test1, device-mqtt-broker-test2, device-mqtt-broker-test3'
       API_GATEWAY_HOST: edgex-kong
       API_GATEWAY_STATUS_PORT: '8100'
       EDGEX_GROUP: '2001'
@@ -382,6 +382,7 @@ services:
       SECRETSTORE_HOST: edgex-vault
       SECRETSTORE_PORT: '8200'
       SERVICE_HOST: edgex-device-mqtt
+      SERVICE_NAME: device-mqtt
       SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
       SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
       SPIFFE_TRUSTDOMAIN: edgexfoundry.org
@@ -844,8 +845,8 @@ services:
     - security-bootstrapper
     - vault
     environment:
-      ADD_KNOWN_SECRETS: redisdb[app-rules-engine],redisdb[device-mqtt]
-      ADD_SECRETSTORE_TOKENS: 'device-mqtt'
+      ADD_KNOWN_SECRETS: redisdb[app-rules-engine],redisdb[device-mqtt], redisdb[device-mqtt-1], redisdb[device-mqtt-broker-adsas2], redisdb[device-mqtt-broker-adsas5], redisdb[device-mqtt-broker-test], redisdb[device-mqtt-broker-test1], redisdb[device-mqtt-broker-test2], redisdb[device-mqtt-broker-test3]
+      ADD_SECRETSTORE_TOKENS: 'device-mqtt, device-mqtt-1, device-mqtt-broker-adsas2, device-mqtt-broker-adsas5, device-mqtt-broker-test, device-mqtt-broker-test1, device-mqtt-broker-test2, device-mqtt-broker-test3'
       API_GATEWAY_HOST: edgex-kong
       API_GATEWAY_STATUS_PORT: '8100'
       EDGEX_GROUP: '2001'
@@ -1053,24 +1054,98 @@ services:
     - vault-file:/vault/file:z
     - vault-logs:/vault/logs:z
 
-  # api-add-device:
-  #   build: 
-  #     context: ./gateway
-  #     dockerfile: Dockerfile
-  #   depends_on:
-  #   - consul
-  #   - data
-  #   - metadata
-  #   networks:
-  #     edgex-network: {}
-  #   restart: always
-  #   container_name: edgex-api-add-device
-  #   ports: 
-  #   - 12345:12345
+  api-add-device:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+    - consul
+    - data
+    - metadata
+    networks:
+      edgex-network: {}
+    restart: always
+    container_name: edgex-api-add-device
+    user: root:root
+    ports: 
+    - 12345:12345
+    volumes:
+    - ./docker-compose.yml:/app/docker-compose.yml
 
-  device-mqtt-broker:adsasd:
+  device-mqtt-1:
     command: /device-mqtt -cp=consul.http://edgex-core-consul:8500 --registry --confdir=/res
-    container_name: edgex-device-mqtt-broker:adsasd
+    container_name: edgex-device-mqtt-1
+    depends_on:
+      - consul
+      - data
+      - metadata
+      - security-bootstrapper
+    entrypoint:
+      - /edgex-init/ready_to_run_wait_install.sh
+    environment:
+      MQTTBROKERINFO_HOST: 180.148.5.122
+      MQTTBROKERINFO_PORT: 1883
+      MQTTBROKERINFO_QOS: 0
+      MQTTBROKERINFO_AUTHMODE: usernamepassword
+      MQTTBROKERINFO_USERNAME: smic
+      MQTTBROKERINFO_PASSWORD: smic
+      # change the client ID to resolve conflict if there are more than 1 machine running the service at the same time
+      MQTTBROKERINFO_CLIENTID: mqtt-client-deploy-AIOT
+      MQTTBROKERINFO_INCOMINGTOPIC: STP/#
+      MQTTBROKERINFO_RESPONSETOPIC: STP/#
+      MQTTBROKERINFO_USETOPICLEVELS: "true"
+      API_GATEWAY_HOST: edgex-kong
+      API_GATEWAY_STATUS_PORT: '8100'
+      CLIENTS_CORE_COMMAND_HOST: edgex-core-command
+      CLIENTS_CORE_DATA_HOST: edgex-core-data
+      CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
+      CLIENTS_SUPPORT_NOTIFICATIONS_HOST: edgex-support-notifications
+      CLIENTS_SUPPORT_SCHEDULER_HOST: edgex-support-scheduler
+      DATABASES_PRIMARY_HOST: edgex-redis
+      EDGEX_SECURITY_SECRET_STORE: "true"
+      MESSAGEQUEUE_HOST: edgex-redis
+      PROXY_SETUP_HOST: edgex-security-proxy-setup
+      REGISTRY_HOST: edgex-core-consul
+      SECRETSTORE_HOST: edgex-vault
+      SECRETSTORE_PORT: '8200'
+      SERVICE_HOST: edgex-device-mqtt-1
+      SERVICE_NAME: device-mqtt-1
+      SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
+      SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
+      SPIFFE_TRUSTDOMAIN: edgexfoundry.org
+      STAGEGATE_BOOTSTRAPPER_HOST: edgex-security-bootstrapper
+      STAGEGATE_BOOTSTRAPPER_STARTPORT: '54321'
+      STAGEGATE_DATABASE_HOST: edgex-redis
+      STAGEGATE_DATABASE_PORT: '6379'
+      STAGEGATE_DATABASE_READYPORT: '6379'
+      STAGEGATE_KONGDB_HOST: edgex-kong-db
+      STAGEGATE_KONGDB_PORT: '5432'
+      STAGEGATE_KONGDB_READYPORT: '54325'
+      STAGEGATE_READY_TORUNPORT: '54329'
+      STAGEGATE_REGISTRY_HOST: edgex-core-consul
+      STAGEGATE_REGISTRY_PORT: '8500'
+      STAGEGATE_REGISTRY_READYPORT: '54324'
+      STAGEGATE_SECRETSTORESETUP_HOST: edgex-security-secretstore-setup
+      STAGEGATE_SECRETSTORESETUP_TOKENS_READYPORT: '54322'
+      STAGEGATE_WAITFOR_TIMEOUT: 60s
+    hostname: edgex-device-mqtt-1
+    image: docker.io/edgexfoundry/device-mqtt:0.0.0-dev
+    networks:
+      edgex-network: {}
+    ports:
+      - 59983:59982/tcp
+    read_only: true
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    user: 2002:2001
+    volumes:
+      - edgex-init:/edgex-init:ro,z
+      - /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z
+
+  device-mqtt-broker-adsas2:
+    command: /device-mqtt -cp=consul.http://edgex-core-consul:8500 --registry --confdir=/res
+    container_name: edgex-device-mqtt-broker-adsas2
     depends_on:
     - consul
     - data
@@ -1079,7 +1154,7 @@ services:
     entrypoint:
     - /edgex-init/ready_to_run_wait_install.sh
     environment:
-      MQTTBROKERINFO_HOST: adsasd
+      MQTTBROKERINFO_HOST: adsas2
       MQTTBROKERINFO_PORT: 1883
       MQTTBROKERINFO_QOS: 0
       MQTTBROKERINFO_AUTHMODE: usernamepassword
@@ -1104,7 +1179,7 @@ services:
       REGISTRY_HOST: edgex-core-consul
       SECRETSTORE_HOST: edgex-vault
       SECRETSTORE_PORT: '8200'
-      SERVICE_HOST: edgex-device-mqtt-broker:adsasd
+      SERVICE_HOST: edgex-device-mqtt-broker-adsas2
       SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
       SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
       SPIFFE_TRUSTDOMAIN: edgexfoundry.org
@@ -1126,12 +1201,12 @@ services:
       # WRITETABLE_INSECURESECRETS_MQTT_PATH: "credentials"
       # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_USERNAME: "username"
       # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_PASSWORD: "password"
-    hostname: edgex-device-mqtt-broker:adsasd
+    hostname: edgex-device-mqtt-broker-adsas2
     image: docker.io/edgexfoundry/device-mqtt:0.0.0-dev
     networks:
       edgex-network: {}
     ports:
-    - 59982:59984/tcp
+    - 59985:59982/tcp
     read_only: true
     restart: always
     security_opt:
@@ -1139,4 +1214,374 @@ services:
     user: 2002:2001
     volumes:
     - edgex-init:/edgex-init:ro,z
-    - /tmp/edgex/secrets/device-mqtt-broker:%!s(MISSING):/tmp/edgex/secrets/device-mqtt-broker:%!s(MISSING):ro,z
+    - /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z
+
+
+  device-mqtt-broker-adsas5:
+    command: /device-mqtt -cp=consul.http://edgex-core-consul:8500 --registry --confdir=/res
+    container_name: edgex-device-mqtt-broker-adsas5
+    depends_on:
+    - consul
+    - data
+    - metadata
+    - security-bootstrapper
+    entrypoint:
+    - /edgex-init/ready_to_run_wait_install.sh
+    environment:
+      MQTTBROKERINFO_HOST: adsas5
+      MQTTBROKERINFO_PORT: 1883
+      MQTTBROKERINFO_QOS: 0
+      MQTTBROKERINFO_AUTHMODE: usernamepassword
+      MQTTBROKERINFO_USERNAME: dsad
+      MQTTBROKERINFO_PASSWORD: 123
+      # change the client ID to resolve conflict if there are more than 1 machine running the service at the same time
+      MQTTBROKERINFO_CLIENTID: mqtt-client-deploy-AIOT
+      MQTTBROKERINFO_INCOMINGTOPIC: STP/#
+      MQTTBROKERINFO_RESPONSETOPIC: STP/#
+      MQTTBROKERINFO_USETOPICLEVELS: "true"
+      API_GATEWAY_HOST: edgex-kong
+      API_GATEWAY_STATUS_PORT: '8100'
+      CLIENTS_CORE_COMMAND_HOST: edgex-core-command
+      CLIENTS_CORE_DATA_HOST: edgex-core-data
+      CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
+      CLIENTS_SUPPORT_NOTIFICATIONS_HOST: edgex-support-notifications
+      CLIENTS_SUPPORT_SCHEDULER_HOST: edgex-support-scheduler
+      DATABASES_PRIMARY_HOST: edgex-redis
+      EDGEX_SECURITY_SECRET_STORE: "true"
+      MESSAGEQUEUE_HOST: edgex-redis
+      PROXY_SETUP_HOST: edgex-security-proxy-setup
+      REGISTRY_HOST: edgex-core-consul
+      SECRETSTORE_HOST: edgex-vault
+      SECRETSTORE_PORT: '8200'
+      SERVICE_HOST: edgex-device-mqtt-broker-adsas5
+      SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
+      SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
+      SPIFFE_TRUSTDOMAIN: edgexfoundry.org
+      STAGEGATE_BOOTSTRAPPER_HOST: edgex-security-bootstrapper
+      STAGEGATE_BOOTSTRAPPER_STARTPORT: '54321'
+      STAGEGATE_DATABASE_HOST: edgex-redis
+      STAGEGATE_DATABASE_PORT: '6379'
+      STAGEGATE_DATABASE_READYPORT: '6379'
+      STAGEGATE_KONGDB_HOST: edgex-kong-db
+      STAGEGATE_KONGDB_PORT: '5432'
+      STAGEGATE_KONGDB_READYPORT: '54325'
+      STAGEGATE_READY_TORUNPORT: '54329'
+      STAGEGATE_REGISTRY_HOST: edgex-core-consul
+      STAGEGATE_REGISTRY_PORT: '8500'
+      STAGEGATE_REGISTRY_READYPORT: '54324'
+      STAGEGATE_SECRETSTORESETUP_HOST: edgex-security-secretstore-setup
+      STAGEGATE_SECRETSTORESETUP_TOKENS_READYPORT: '54322'
+      STAGEGATE_WAITFOR_TIMEOUT: 60s
+      # WRITETABLE_INSECURESECRETS_MQTT_PATH: "credentials"
+      # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_USERNAME: "username"
+      # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_PASSWORD: "password"
+    hostname: edgex-device-mqtt-broker-adsas5
+    image: docker.io/edgexfoundry/device-mqtt:0.0.0-dev
+    networks:
+      edgex-network: {}
+    ports:
+    - 59987:59982/tcp
+    read_only: true
+    restart: always
+    security_opt:
+    - no-new-privileges:true
+    user: 2002:2001
+    volumes:
+    - edgex-init:/edgex-init:ro,z
+    - /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z
+
+
+  device-mqtt-broker-test:
+    command: /device-mqtt -cp=consul.http://edgex-core-consul:8500 --registry --confdir=/res
+    container_name: edgex-device-mqtt-broker-test
+    depends_on:
+    - consul
+    - data
+    - metadata
+    - security-bootstrapper
+    entrypoint:
+    - /edgex-init/ready_to_run_wait_install.sh
+    environment:
+      MQTTBROKERINFO_HOST: test
+      MQTTBROKERINFO_PORT: 1883
+      MQTTBROKERINFO_QOS: 0
+      MQTTBROKERINFO_AUTHMODE: usernamepassword
+      MQTTBROKERINFO_USERNAME: dsad
+      MQTTBROKERINFO_PASSWORD: 123
+      # change the client ID to resolve conflict if there are more than 1 machine running the service at the same time
+      MQTTBROKERINFO_CLIENTID: mqtt-client-deploy-AIOT
+      MQTTBROKERINFO_INCOMINGTOPIC: STP/#
+      MQTTBROKERINFO_RESPONSETOPIC: STP/#
+      MQTTBROKERINFO_USETOPICLEVELS: "true"
+      API_GATEWAY_HOST: edgex-kong
+      API_GATEWAY_STATUS_PORT: '8100'
+      CLIENTS_CORE_COMMAND_HOST: edgex-core-command
+      CLIENTS_CORE_DATA_HOST: edgex-core-data
+      CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
+      CLIENTS_SUPPORT_NOTIFICATIONS_HOST: edgex-support-notifications
+      CLIENTS_SUPPORT_SCHEDULER_HOST: edgex-support-scheduler
+      DATABASES_PRIMARY_HOST: edgex-redis
+      EDGEX_SECURITY_SECRET_STORE: "true"
+      MESSAGEQUEUE_HOST: edgex-redis
+      PROXY_SETUP_HOST: edgex-security-proxy-setup
+      REGISTRY_HOST: edgex-core-consul
+      SECRETSTORE_HOST: edgex-vault
+      SECRETSTORE_PORT: '8200'
+      SERVICE_HOST: edgex-device-mqtt-broker-test
+      SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
+      SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
+      SPIFFE_TRUSTDOMAIN: edgexfoundry.org
+      STAGEGATE_BOOTSTRAPPER_HOST: edgex-security-bootstrapper
+      STAGEGATE_BOOTSTRAPPER_STARTPORT: '54321'
+      STAGEGATE_DATABASE_HOST: edgex-redis
+      STAGEGATE_DATABASE_PORT: '6379'
+      STAGEGATE_DATABASE_READYPORT: '6379'
+      STAGEGATE_KONGDB_HOST: edgex-kong-db
+      STAGEGATE_KONGDB_PORT: '5432'
+      STAGEGATE_KONGDB_READYPORT: '54325'
+      STAGEGATE_READY_TORUNPORT: '54329'
+      STAGEGATE_REGISTRY_HOST: edgex-core-consul
+      STAGEGATE_REGISTRY_PORT: '8500'
+      STAGEGATE_REGISTRY_READYPORT: '54324'
+      STAGEGATE_SECRETSTORESETUP_HOST: edgex-security-secretstore-setup
+      STAGEGATE_SECRETSTORESETUP_TOKENS_READYPORT: '54322'
+      STAGEGATE_WAITFOR_TIMEOUT: 60s
+      # WRITETABLE_INSECURESECRETS_MQTT_PATH: "credentials"
+      # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_USERNAME: "username"
+      # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_PASSWORD: "password"
+    hostname: edgex-device-mqtt-broker-test
+    image: docker.io/edgexfoundry/device-mqtt:0.0.0-dev
+    networks:
+      edgex-network: {}
+    ports:
+    - 59989:59982/tcp
+    read_only: true
+    restart: always
+    security_opt:
+    - no-new-privileges:true
+    user: 2002:2001
+    volumes:
+    - edgex-init:/edgex-init:ro,z
+    - /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z
+
+
+  device-mqtt-broker-test1:
+    command: /device-mqtt -cp=consul.http://edgex-core-consul:8500 --registry --confdir=/res
+    container_name: edgex-device-mqtt-broker-test1
+    depends_on:
+    - consul
+    - data
+    - metadata
+    - security-bootstrapper
+    entrypoint:
+    - /edgex-init/ready_to_run_wait_install.sh
+    environment:
+      MQTTBROKERINFO_HOST: test1
+      MQTTBROKERINFO_PORT: 1883
+      MQTTBROKERINFO_QOS: 0
+      MQTTBROKERINFO_AUTHMODE: usernamepassword
+      MQTTBROKERINFO_USERNAME: dsad
+      MQTTBROKERINFO_PASSWORD: 123
+      # change the client ID to resolve conflict if there are more than 1 machine running the service at the same time
+      MQTTBROKERINFO_CLIENTID: mqtt-client-deploy-AIOT
+      MQTTBROKERINFO_INCOMINGTOPIC: STP/#
+      MQTTBROKERINFO_RESPONSETOPIC: STP/#
+      MQTTBROKERINFO_USETOPICLEVELS: "true"
+      API_GATEWAY_HOST: edgex-kong
+      API_GATEWAY_STATUS_PORT: '8100'
+      CLIENTS_CORE_COMMAND_HOST: edgex-core-command
+      CLIENTS_CORE_DATA_HOST: edgex-core-data
+      CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
+      CLIENTS_SUPPORT_NOTIFICATIONS_HOST: edgex-support-notifications
+      CLIENTS_SUPPORT_SCHEDULER_HOST: edgex-support-scheduler
+      DATABASES_PRIMARY_HOST: edgex-redis
+      EDGEX_SECURITY_SECRET_STORE: "true"
+      MESSAGEQUEUE_HOST: edgex-redis
+      PROXY_SETUP_HOST: edgex-security-proxy-setup
+      REGISTRY_HOST: edgex-core-consul
+      SECRETSTORE_HOST: edgex-vault
+      SECRETSTORE_PORT: '8200'
+      SERVICE_HOST: edgex-device-mqtt-broker-test1
+      SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
+      SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
+      SPIFFE_TRUSTDOMAIN: edgexfoundry.org
+      STAGEGATE_BOOTSTRAPPER_HOST: edgex-security-bootstrapper
+      STAGEGATE_BOOTSTRAPPER_STARTPORT: '54321'
+      STAGEGATE_DATABASE_HOST: edgex-redis
+      STAGEGATE_DATABASE_PORT: '6379'
+      STAGEGATE_DATABASE_READYPORT: '6379'
+      STAGEGATE_KONGDB_HOST: edgex-kong-db
+      STAGEGATE_KONGDB_PORT: '5432'
+      STAGEGATE_KONGDB_READYPORT: '54325'
+      STAGEGATE_READY_TORUNPORT: '54329'
+      STAGEGATE_REGISTRY_HOST: edgex-core-consul
+      STAGEGATE_REGISTRY_PORT: '8500'
+      STAGEGATE_REGISTRY_READYPORT: '54324'
+      STAGEGATE_SECRETSTORESETUP_HOST: edgex-security-secretstore-setup
+      STAGEGATE_SECRETSTORESETUP_TOKENS_READYPORT: '54322'
+      STAGEGATE_WAITFOR_TIMEOUT: 60s
+      # WRITETABLE_INSECURESECRETS_MQTT_PATH: "credentials"
+      # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_USERNAME: "username"
+      # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_PASSWORD: "password"
+    hostname: edgex-device-mqtt-broker-test1
+    image: docker.io/edgexfoundry/device-mqtt:0.0.0-dev
+    networks:
+      edgex-network: {}
+    ports:
+    - 59991:59982/tcp
+    read_only: true
+    restart: always
+    security_opt:
+    - no-new-privileges:true
+    user: 2002:2001
+    volumes:
+    - edgex-init:/edgex-init:ro,z
+    - /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z
+
+
+  device-mqtt-broker-test2:
+    command: /device-mqtt -cp=consul.http://edgex-core-consul:8500 --registry --confdir=/res
+    container_name: edgex-device-mqtt-broker-test2
+    depends_on:
+    - consul
+    - data
+    - metadata
+    - security-bootstrapper
+    entrypoint:
+    - /edgex-init/ready_to_run_wait_install.sh
+    environment:
+      MQTTBROKERINFO_HOST: test2
+      MQTTBROKERINFO_PORT: 1883
+      MQTTBROKERINFO_QOS: 0
+      MQTTBROKERINFO_AUTHMODE: usernamepassword
+      MQTTBROKERINFO_USERNAME: dsad
+      MQTTBROKERINFO_PASSWORD: 123
+      # change the client ID to resolve conflict if there are more than 1 machine running the service at the same time
+      MQTTBROKERINFO_CLIENTID: mqtt-client-deploy-AIOT
+      MQTTBROKERINFO_INCOMINGTOPIC: STP/#
+      MQTTBROKERINFO_RESPONSETOPIC: STP/#
+      MQTTBROKERINFO_USETOPICLEVELS: "true"
+      API_GATEWAY_HOST: edgex-kong
+      API_GATEWAY_STATUS_PORT: '8100'
+      CLIENTS_CORE_COMMAND_HOST: edgex-core-command
+      CLIENTS_CORE_DATA_HOST: edgex-core-data
+      CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
+      CLIENTS_SUPPORT_NOTIFICATIONS_HOST: edgex-support-notifications
+      CLIENTS_SUPPORT_SCHEDULER_HOST: edgex-support-scheduler
+      DATABASES_PRIMARY_HOST: edgex-redis
+      EDGEX_SECURITY_SECRET_STORE: "true"
+      MESSAGEQUEUE_HOST: edgex-redis
+      PROXY_SETUP_HOST: edgex-security-proxy-setup
+      REGISTRY_HOST: edgex-core-consul
+      SECRETSTORE_HOST: edgex-vault
+      SECRETSTORE_PORT: '8200'
+      SERVICE_HOST: edgex-device-mqtt-broker-test2
+      SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
+      SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
+      SPIFFE_TRUSTDOMAIN: edgexfoundry.org
+      STAGEGATE_BOOTSTRAPPER_HOST: edgex-security-bootstrapper
+      STAGEGATE_BOOTSTRAPPER_STARTPORT: '54321'
+      STAGEGATE_DATABASE_HOST: edgex-redis
+      STAGEGATE_DATABASE_PORT: '6379'
+      STAGEGATE_DATABASE_READYPORT: '6379'
+      STAGEGATE_KONGDB_HOST: edgex-kong-db
+      STAGEGATE_KONGDB_PORT: '5432'
+      STAGEGATE_KONGDB_READYPORT: '54325'
+      STAGEGATE_READY_TORUNPORT: '54329'
+      STAGEGATE_REGISTRY_HOST: edgex-core-consul
+      STAGEGATE_REGISTRY_PORT: '8500'
+      STAGEGATE_REGISTRY_READYPORT: '54324'
+      STAGEGATE_SECRETSTORESETUP_HOST: edgex-security-secretstore-setup
+      STAGEGATE_SECRETSTORESETUP_TOKENS_READYPORT: '54322'
+      STAGEGATE_WAITFOR_TIMEOUT: 60s
+      # WRITETABLE_INSECURESECRETS_MQTT_PATH: "credentials"
+      # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_USERNAME: "username"
+      # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_PASSWORD: "password"
+    hostname: edgex-device-mqtt-broker-test2
+    image: docker.io/edgexfoundry/device-mqtt:0.0.0-dev
+    networks:
+      edgex-network: {}
+    ports:
+    - 59993:59982/tcp
+    read_only: true
+    restart: always
+    security_opt:
+    - no-new-privileges:true
+    user: 2002:2001
+    volumes:
+    - edgex-init:/edgex-init:ro,z
+    - /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z
+
+
+  device-mqtt-broker-test3:
+    command: /device-mqtt -cp=consul.http://edgex-core-consul:8500 --registry --confdir=/res
+    container_name: edgex-device-mqtt-broker-test3
+    depends_on:
+    - consul
+    - data
+    - metadata
+    - security-bootstrapper
+    entrypoint:
+    - /edgex-init/ready_to_run_wait_install.sh
+    environment:
+      MQTTBROKERINFO_HOST: test3
+      MQTTBROKERINFO_PORT: 1883
+      MQTTBROKERINFO_QOS: 0
+      MQTTBROKERINFO_AUTHMODE: usernamepassword
+      MQTTBROKERINFO_USERNAME: dsad
+      MQTTBROKERINFO_PASSWORD: 123
+      # change the client ID to resolve conflict if there are more than 1 machine running the service at the same time
+      MQTTBROKERINFO_CLIENTID: mqtt-client-deploy-AIOT
+      MQTTBROKERINFO_INCOMINGTOPIC: STP/#
+      MQTTBROKERINFO_RESPONSETOPIC: STP/#
+      MQTTBROKERINFO_USETOPICLEVELS: "true"
+      API_GATEWAY_HOST: edgex-kong
+      API_GATEWAY_STATUS_PORT: '8100'
+      CLIENTS_CORE_COMMAND_HOST: edgex-core-command
+      CLIENTS_CORE_DATA_HOST: edgex-core-data
+      CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
+      CLIENTS_SUPPORT_NOTIFICATIONS_HOST: edgex-support-notifications
+      CLIENTS_SUPPORT_SCHEDULER_HOST: edgex-support-scheduler
+      DATABASES_PRIMARY_HOST: edgex-redis
+      EDGEX_SECURITY_SECRET_STORE: "true"
+      MESSAGEQUEUE_HOST: edgex-redis
+      PROXY_SETUP_HOST: edgex-security-proxy-setup
+      REGISTRY_HOST: edgex-core-consul
+      SECRETSTORE_HOST: edgex-vault
+      SECRETSTORE_PORT: '8200'
+      SERVICE_HOST: edgex-device-mqtt-broker-test3
+      SPIFFE_ENDPOINTSOCKET: /tmp/edgex/secrets/spiffe/public/api.sock
+      SPIFFE_TRUSTBUNDLE_PATH: /tmp/edgex/secrets/spiffe/trust/bundle
+      SPIFFE_TRUSTDOMAIN: edgexfoundry.org
+      STAGEGATE_BOOTSTRAPPER_HOST: edgex-security-bootstrapper
+      STAGEGATE_BOOTSTRAPPER_STARTPORT: '54321'
+      STAGEGATE_DATABASE_HOST: edgex-redis
+      STAGEGATE_DATABASE_PORT: '6379'
+      STAGEGATE_DATABASE_READYPORT: '6379'
+      STAGEGATE_KONGDB_HOST: edgex-kong-db
+      STAGEGATE_KONGDB_PORT: '5432'
+      STAGEGATE_KONGDB_READYPORT: '54325'
+      STAGEGATE_READY_TORUNPORT: '54329'
+      STAGEGATE_REGISTRY_HOST: edgex-core-consul
+      STAGEGATE_REGISTRY_PORT: '8500'
+      STAGEGATE_REGISTRY_READYPORT: '54324'
+      STAGEGATE_SECRETSTORESETUP_HOST: edgex-security-secretstore-setup
+      STAGEGATE_SECRETSTORESETUP_TOKENS_READYPORT: '54322'
+      STAGEGATE_WAITFOR_TIMEOUT: 60s
+      # WRITETABLE_INSECURESECRETS_MQTT_PATH: "credentials"
+      # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_USERNAME: "username"
+      # WRITETABLE_INSECURESECRETS_MQTT_SECRETS_PASSWORD: "password"
+    hostname: edgex-device-mqtt-broker-test3
+    image: docker.io/edgexfoundry/device-mqtt:0.0.0-dev
+    networks:
+      edgex-network: {}
+    ports:
+    - 59995:59982/tcp
+    read_only: true
+    restart: always
+    security_opt:
+    - no-new-privileges:true
+    user: 2002:2001
+    volumes:
+    - edgex-init:/edgex-init:ro,z
+    - /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z

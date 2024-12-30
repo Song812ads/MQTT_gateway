@@ -61,7 +61,7 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, err)
 		return
 	}
-	file, errFile := os.Open("../docker-compose.yml")
+	file, errFile := os.Open("docker-compose.yml")
 
 	if errFile != nil {
 		WriteError(w, http.StatusBadRequest, errFile)
@@ -77,7 +77,7 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 	scanner := bufio.NewScanner(file)
 
 	found := false
-	re := regexp.MustCompile(`59982:(\d+)`)
+	re := regexp.MustCompile(`(\d+):59982`)
 	var maxPort float64 = math.Inf(-1)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -181,7 +181,7 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
     networks:
       edgex-network: {}
     ports:
-    - 59982:%s/tcp
+    - %s:59982/tcp
     read_only: true
     restart: always
     security_opt:
@@ -189,11 +189,11 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
     user: 2002:2001
     volumes:
     - edgex-init:/edgex-init:ro,z
-    - /tmp/edgex/secrets/device-mqtt-broker-%s:/tmp/edgex/secrets/device-mqtt-broker-%s:ro,z`,
+    - /tmp/edgex/secrets/device-mqtt:/tmp/edgex/secrets/device-mqtt:ro,z`,
 			deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Username, deviceInfo.Password, deviceInfo.Broker, deviceInfo.Broker, portString)
 		// , deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, deviceInfo.Broker, port)
 
-		file, errFile := os.OpenFile("../docker-compose.yml", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		file, errFile := os.OpenFile("docker-compose.yml", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 		if errFile != nil {
 			fmt.Println(errFile)
 			return
@@ -204,15 +204,24 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		if err := scanAndUpdate("../docker-compose.yml", fmt.Sprintf("device-mqtt-broker-%s", deviceInfo.Broker)); err != nil {
+		if err := scanAndUpdate("docker-compose.yml", fmt.Sprintf("device-mqtt-broker-%s", deviceInfo.Broker)); err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
+
+		// cmd := exec.Command("docker compose", "up", "-d")
+		// cmd.Dir = "/app"
+		// _, err := cmd.CombinedOutput()
+
+		// if err != nil {
+		// 	WriteError(w, http.StatusBadRequest, err)
+		// 	return
+		// }
 	}
 	// fmt.Println(deviceInfo.Broker)
 
-	// url_edgex := fmt.Sprintf("http://localhost:59881/deviceservice/name/device-mqtt", deviceInfo.Broker)
-	url_edgex := fmt.Sprintf("http://localhost:59881/api/v2/deviceservice/name/device-mqtt")
+	// url_edgex := fmt.Sprintf("http://edgex-core-metadata:59881/deviceservice/name/device-mqtt", deviceInfo.Broker)
+	url_edgex := fmt.Sprintf("http://edgex-core-metadata:59881/api/v2/deviceservice/name/device-mqtt")
 
 	c := http.Client{Timeout: time.Duration(1) * time.Second}
 	// fmt.Println("Here")
@@ -243,8 +252,8 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 
 	for i := 0; i < len(deviceInfo.Topic); i++ {
 
-		var url_device_profile = fmt.Sprintf("http://localhost:59881/api/v2/device/name/%s", device_name[i])
-		var url_device_resource = fmt.Sprintf("http://localhost:59881/api/v2/deviceresource/profile/%s-Profile/resource/%s", device_name[i], profile_name[i])
+		var url_device_profile = fmt.Sprintf("http://edgex-core-metadata:59881/api/v2/device/name/%s", device_name[i])
+		var url_device_resource = fmt.Sprintf("http://edgex-core-metadata:59881/api/v2/deviceresource/profile/%s-Profile/resource/%s", device_name[i], profile_name[i])
 		// Send the GET request
 
 		if getRequest(c, url_device_profile) {
@@ -261,9 +270,9 @@ func (s *Service) AddDevice(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	url_profile := "http://localhost:59881/api/v2/deviceprofile"
-	url_device := "http://localhost:59881/api/v2/device"
-	url_resource := "http://localhost:59881/api/v2/deviceprofile/resource"
+	url_profile := "http://edgex-core-metadata:59881/api/v2/deviceprofile"
+	url_device := "http://edgex-core-metadata:59881/api/v2/device"
+	url_resource := "http://edgex-core-metadata:59881/api/v2/deviceprofile/resource"
 	for i := 0; i < len(deviceInfo.Topic); i++ {
 
 		if todo[i] == "post" {
